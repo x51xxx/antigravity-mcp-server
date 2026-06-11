@@ -1,0 +1,121 @@
+import { z } from "zod";
+import { UnifiedTool, StructuredToolResult } from "./registry.js";
+import {
+  listSessions,
+  getSessionStats,
+  deleteSession,
+  clearAllSessions,
+} from "../utils/sessionStorage.js";
+
+const listSessionsArgsSchema = z.object({
+  action: z
+    .enum(["list", "delete", "clear"])
+    .default("list")
+    .describe(
+      "Action: list (default), delete (single session), clear (all sessions)",
+    ),
+  sessionId: z.string().optional().describe("Session ID for delete action"),
+});
+
+function formatSessionsList(): string {
+  const sessions = listSessions();
+  const stats = getSessionStats();
+
+  if (sessions.length === 0) {
+    return `**No active sessions**
+
+Session Configuration:
+- Max sessions: ${stats.maxSessions}
+- TTL: ${Math.round(stats.ttlMs / (60 * 60 * 1000))} hours
+
+Tip: Use \`sessionId\` parameter in \`ask-antigravity\` to start a new session.`;
+  }
+
+  let output = `## Active Sessions (${sessions.length}/${stats.maxSessions})\n\n`;
+  output += `| Session ID | Workspace | Last Activity | Has Resume |\n`;
+  output += `|------------|-----------|---------------|------------|\n`;
+
+  for (const s of sessions) {
+    const lastActivity = new Date(s.updatedAt).toLocaleString();
+    const hasResume = s.conversationId ? "✅" : "❌";
+    const workspaceShort = s.workspaceId.substring(0, 8);
+    output += `| \`${s.sessionId.substring(0, 16)}...\` | ${workspaceShort} | ${lastActivity} | ${hasResume} |\n`;
+  }
+
+  output += `\n**Statistics:**\n`;
+  output += `- Total sessions: ${stats.total}\n`;
+  output += `- With resume capability: ${stats.withResume}\n`;
+  output += `- TTL: ${Math.round(stats.ttlMs / (60 * 60 * 1000))} hours\n`;
+  return output;
+}
+
+export const listSessionsTool: UnifiedTool = {
+  name: "list-sessions",
+  description:
+    "List active conversation sessions with metadata, or manage them (delete/clear)",
+  zodSchema: listSessionsArgsSchema,
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    openWorldHint: false,
+  },
+  outputSchema: {
+    type: "object",
+    properties: {
+      action: { type: "string" },
+      sessions: { type: "array" },
+      stats: { type: "object" },
+    },
+    required: ["action"],
+  },
+  prompt: {
+    description: "View and manage active Antigravity sessions",
+  },
+  category: "utility",
+  execute: async (args) => {
+    const { action, sessionId } = args;
+    switch (action) {
+      case "delete": {
+        if (!sessionId) {
+          return "❌ **Error**: Session ID required for delete action.\n\nUsage: `list-sessions action:delete sessionId:<session-id>`";
+        }
+        const deleted = deleteSession(sessionId as string);
+        return {
+          text: deleted
+            ? `✅ Session \`${sessionId}\` deleted successfully.`
+            : `❌ Session \`${sessionId}\` not found or already expired.`,
+          structuredContent: { action: "delete", sessionId, success: deleted },
+        } as StructuredToolResult;
+      }
+      case "clear":
+        clearAllSessions();
+        return {
+          text: "✅ All sessions cleared.",
+          structuredContent: { action: "clear", success: true },
+        } as StructuredToolResult;
+      case "list":
+      default: {
+        const sessions = listSessions();
+        const stats = getSessionStats();
+        return {
+          text: formatSessionsList(),
+          structuredContent: {
+            action: "list",
+            sessions: sessions.map((s) => ({
+              sessionId: s.sessionId,
+              workspaceId: s.workspaceId,
+              updatedAt: s.updatedAt,
+              hasResume: !!s.conversationId,
+            })),
+            stats: {
+              total: stats.total,
+              withResume: stats.withResume,
+              maxSessions: stats.maxSessions,
+              ttlHours: Math.round(stats.ttlMs / (60 * 60 * 1000)),
+            },
+          },
+        } as StructuredToolResult;
+      }
+    }
+  },
+};

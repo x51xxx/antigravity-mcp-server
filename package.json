@@ -1,0 +1,77 @@
+{
+  "name": "@trishchuk/antigravity-mcp-server",
+  "version": "0.1.0",
+  "mcpName": "io.github.x51xxx/antigravity-mcp-server",
+  "description": "MCP server for Google Antigravity CLI (agy) integration",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "antigravity-mcp": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsc && node dist/index.js",
+    "test": "npm run build && node --test 'dist/**/*.test.js'",
+    "lint": "tsc --noEmit",
+    "format": "prettier --write \"src/**/*.{ts,js,json,md}\" \"*.{md,json}\"",
+    "format:check": "prettier --check \"src/**/*.{ts,js,json,md}\" \"*.{md,json}\"",
+    "prepublishOnly": "echo '⚠️  Remember to test locally first!' && npm run build"
+  },
+  "keywords": [
+    "mcp",
+    "mcp-server",
+    "model-context-protocol",
+    "modelcontextprotocol",
+    "antigravity",
+    "antigravity-cli",
+    "agy",
+    "google",
+    "gemini",
+    "claude",
+    "cursor",
+    "ai",
+    "llm",
+    "cli",
+    "server",
+    "tool",
+    "code-review",
+    "code-analysis",
+    "automation",
+    "typescript",
+    "nodejs"
+  ],
+  "author": "Taras Trishchuk",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/x51xxx/antigravity-mcp-server.git"
+  },
+  "bugs": {
+    "url": "https://github.com/x51xxx/antigravity-mcp-server/issues"
+  },
+  "homepage": "https://github.com/x51xxx/antigravity-mcp-server#readme",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "files": [
+    "dist/",
+    "README.md",
+    "LICENSE"
+  ],
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.26.0",
+    "cross-spawn": "^7.0.6",
+    "zod": "^3.25.76",
+    "zod-to-json-schema": "^3.24.6"
+  },
+  "devDependencies": {
+    "@types/cross-spawn": "^6.0.6",
+    "@types/node": "^18.19.124",
+    "prettier": "^3.6.2",
+    "typescript": "^5.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
