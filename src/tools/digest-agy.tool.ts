@@ -345,7 +345,11 @@ export const digestAgyTool: UnifiedTool = {
         onProgress,
       );
 
-      const text = formatAgyResponseForMCP(result.output, result.stderr, "clean");
+      const text = formatAgyResponseForMCP(
+        result.output,
+        result.stderr,
+        "clean",
+      );
 
       return {
         text: `${banner}\n\n${text}`,

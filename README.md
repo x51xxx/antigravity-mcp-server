@@ -18,7 +18,7 @@ npm install -g @trishchuk/antigravity-mcp-server
 Or run from source:
 
 ```bash
-npm install && npm run build
+pnpm install && pnpm build
 ```
 
 ## MCP client configuration
@@ -45,20 +45,20 @@ claude mcp add antigravity -- npx -y @trishchuk/antigravity-mcp-server
 
 ## Tools
 
-| Tool | Description |
-|------|-------------|
-| `ask-antigravity` | Run a prompt through `agy` in print mode. Supports model override, session resume, `--add-dir`, `--sandbox`, `--dangerously-skip-permissions`, dry-run. |
-| `plan-antigravity` | Generate a structured implementation plan (JSON or markdown) without mutating anything. |
-| `review-changes` | Collect a git diff (working tree / vs base branch / specific commit) and run a structured code review. |
-| `brainstorm` | Structured ideation (divergent, convergent, SCAMPER, design-thinking, lateral). |
-| `digest-antigravity` | Ingest many files/directories and answer a focused question using Antigravity's large model context. |
-| `batch-antigravity` | Run multiple atomic tasks sequentially or in parallel (priority order, stop-on-error, concurrency cap). |
-| `bg-antigravity` | Detached background tasks: start / status / tail / stop / remove / list. State persists in `~/.agy-mcp/bg/` across server restarts. |
-| `delegate-antigravity` | Delegate an implementation task into an isolated git worktree; poll status, then `collect` the diff for selective review. |
-| `list-sessions` | List / delete / clear conversation sessions. |
-| `list-models` | List model labels currently available (`agy models`). |
-| `health` | Diagnose CLI installation, authentication, models, and session state. |
-| `ping`, `Help`, `version`, `metrics` | Utilities. |
+| Tool                                 | Description                                                                                                                                             |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ask-antigravity`                    | Run a prompt through `agy` in print mode. Supports model override, session resume, `--add-dir`, `--sandbox`, `--dangerously-skip-permissions`, dry-run. |
+| `plan-antigravity`                   | Generate a structured implementation plan (JSON or markdown) without mutating anything.                                                                 |
+| `review-changes`                     | Collect a git diff (working tree / vs base branch / specific commit) and run a structured code review.                                                  |
+| `brainstorm`                         | Structured ideation (divergent, convergent, SCAMPER, design-thinking, lateral).                                                                         |
+| `digest-antigravity`                 | Ingest many files/directories and answer a focused question using Antigravity's large model context.                                                    |
+| `batch-antigravity`                  | Run multiple atomic tasks sequentially or in parallel (priority order, stop-on-error, concurrency cap).                                                 |
+| `bg-antigravity`                     | Detached background tasks: start / status / tail / stop / remove / list. State persists in `~/.agy-mcp/bg/` across server restarts.                     |
+| `delegate-antigravity`               | Delegate an implementation task into an isolated git worktree; poll status, then `collect` the diff for selective review.                               |
+| `list-sessions`                      | List / delete / clear conversation sessions.                                                                                                            |
+| `list-models`                        | List model labels currently available (`agy models`).                                                                                                   |
+| `health`                             | Diagnose CLI installation, authentication, models, and session state.                                                                                   |
+| `ping`, `Help`, `version`, `metrics` | Utilities.                                                                                                                                              |
 
 Background and batch tools default to `--dangerously-skip-permissions` because print mode cannot answer interactive permission prompts; pass `skipPermissions: false` to opt out.
 
@@ -108,9 +108,9 @@ When resuming a conversation, agy print mode replays the previous assistant mess
 ## Development
 
 ```bash
-npm run build       # tsc
-npm run lint        # tsc --noEmit
-npm run format      # prettier
+pnpm build          # tsc
+pnpm lint           # tsc --noEmit
+pnpm format         # prettier
 ```
 
 ## License

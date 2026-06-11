@@ -9,9 +9,9 @@ MCP server that bridges MCP clients to the Google Antigravity CLI (`agy`). Porte
 ## Commands
 
 ```bash
-npm run build       # tsc → dist/
-npm run lint        # tsc --noEmit
-npm test            # build + node --test on dist/**/*.test.js
+pnpm build          # tsc → dist/
+pnpm lint           # tsc --noEmit
+pnpm test           # build + node --test on dist/**/*.test.js
 ```
 
 ## Architecture

@@ -85,7 +85,8 @@ export async function executeAgy(
 ): Promise<AgyExecutionResult> {
   metrics.incrementAgyInvocations();
   const builder = new AgyCommandBuilder();
-  const timeoutMs = options?.timeout || options?.timeoutMs || DEFAULT_TIMEOUT_MS;
+  const timeoutMs =
+    options?.timeout || options?.timeoutMs || DEFAULT_TIMEOUT_MS;
   const { args, tempFiles, workingDir, stdin, logFile } = await builder.build(
     prompt,
     {

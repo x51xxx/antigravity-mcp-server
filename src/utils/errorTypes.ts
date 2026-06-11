@@ -65,11 +65,11 @@ export const ERROR_SOLUTIONS: Record<ErrorCategory, string[]> = {
   ],
   [ErrorCategory.AUTHENTICATION]: [
     "Run `agy` once interactively and sign in with your Google account",
-    "Verify auth works: `agy -p \"say OK\"`",
+    'Verify auth works: `agy -p "say OK"`',
   ],
   [ErrorCategory.MODEL]: [
     "Omit the model parameter to use your Antigravity CLI default",
-    "Use the exact display label from `agy models`, e.g. \"Gemini 3.5 Flash (High)\"",
+    'Use the exact display label from `agy models`, e.g. "Gemini 3.5 Flash (High)"',
     "Labels change between CLI releases — re-check after `agy update`",
   ],
   [ErrorCategory.RATE_LIMIT]: [
