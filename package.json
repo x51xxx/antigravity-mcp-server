@@ -1,6 +1,6 @@
 {
   "name": "@trishchuk/antigravity-mcp-server",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "mcpName": "io.github.x51xxx/antigravity-mcp-server",
   "description": "MCP server for Google Antigravity CLI (agy) integration",
   "type": "module",
@@ -16,7 +16,7 @@
     "lint": "tsc --noEmit",
     "format": "prettier --write \"src/**/*.{ts,js,json,md}\" \"*.{md,json}\"",
     "format:check": "prettier --check \"src/**/*.{ts,js,json,md}\" \"*.{md,json}\"",
-    "prepublishOnly": "echo '⚠️  Remember to test locally first!' && pnpm run build"
+    "prepublishOnly": "pnpm run format:check && pnpm run lint && pnpm run test"
   },
   "keywords": [
     "mcp",
@@ -56,8 +56,10 @@
   },
   "files": [
     "dist/",
+    "!dist/**/*.test.*",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "CHANGELOG.md"
   ],
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.26.0",

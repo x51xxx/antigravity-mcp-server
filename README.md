@@ -64,25 +64,38 @@ Background and batch tools default to `--dangerously-skip-permissions` because p
 
 ## Models
 
-The `model` parameter takes the **display label** from `agy models`, e.g.:
+The `model` parameter takes either column of `agy models` — the **model ID** (`gemini-3.7-flash-high`) or the **display label** (`Gemini 3.7 Flash (High)`). As of Antigravity CLI v1.1.14:
 
-- `Gemini 3.5 Flash (Low | Medium | High)`
-- `Gemini 3.1 Pro (Low | High)`
-- `Claude Sonnet 4.6 (Thinking)`, `Claude Opus 4.6 (Thinking)`
-- `GPT-OSS 120B (Medium)`
+| Model                                      | IDs                                  |
+| ------------------------------------------ | ------------------------------------ |
+| `Gemini 3.7 Flash (Low \| Medium \| High)` | `gemini-3.7-flash-{low,medium,high}` |
+| `Gemini 3.6 Flash (Low \| Medium \| High)` | `gemini-3.6-flash-{low,medium,high}` |
+| `Gemini 3.5 Flash (Low \| Medium \| High)` | `gemini-3.5-flash-{low,medium,high}` |
+| `Gemini 3.1 Pro (Low \| High)`             | `gemini-3.1-pro-{low,high}`          |
+| `Claude Sonnet 4.6 (Thinking)`             | `claude-sonnet-4-6`                  |
+| `Claude Opus 4.6 (Thinking)`               | `claude-opus-4-6-thinking`           |
+| `GPT-OSS 120B (Medium)`                    | `gpt-oss-120b-medium`                |
 
-Labels change between CLI releases — use the `list-models` tool for the current list. Omit `model` to use your Antigravity default.
+Labels and tiers change between CLI releases — use the `list-models` tool for the live list.
+
+Omit `model` and the server passes no `--model` flag, so the CLI's own default applies (`"model"` in `~/.gemini/antigravity-cli/settings.json`). The label this server uses in its examples and hints is `Gemini 3.7 Flash (High)` — see `DEFAULT_MODEL` in `src/constants.ts`.
 
 ## Sessions and conversation resume
 
 `ask-antigravity` supports multi-turn conversations:
 
 ```json
-{ "prompt": "Analyze src/auth.ts for security issues", "sessionId": "auth-review" }
+{
+  "prompt": "Analyze src/auth.ts for security issues",
+  "sessionId": "auth-review"
+}
 ```
 
 ```json
-{ "prompt": "Now suggest fixes for the issues you found", "sessionId": "auth-review" }
+{
+  "prompt": "Now suggest fixes for the issues you found",
+  "sessionId": "auth-review"
+}
 ```
 
 How it works: `agy` doesn't print its conversation ID to stdout in print mode, so the server passes `--log-file` to a temp file and parses `Print mode: conversation=<uuid>` from it. The next call with the same `sessionId` resumes via `agy --conversation <uuid>`.

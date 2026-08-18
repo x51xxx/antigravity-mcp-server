@@ -34,9 +34,13 @@ const DEFAULT_TIMEOUT_MS = 600000; // 10 minutes
 
 /**
  * Parse the conversation ID from the agy CLI log file. In print mode the CLI
- * logs lines like:
- *   printmode.go:147] Print mode: conversation=<uuid>, sending message
- *   server.go:753] Created conversation <uuid>
+ * logs lines like (formats vary by CLI version):
+ *   printmode.go:173] Print mode: starting (..., conversationID="<uuid>")   [1.1.x]
+ *   server.go:1074] Created conversation <uuid>                             [1.0.x, 1.1.x]
+ *   printmode.go:147] Print mode: conversation=<uuid>, sending message      [1.0.x]
+ *
+ * On a resumed run only the `conversationID="<uuid>"` form appears — there is
+ * no "Created conversation" line — so both patterns are needed.
  */
 export function parseConversationIdFromLog(logFile: string): string | null {
   let content: string;
@@ -48,6 +52,7 @@ export function parseConversationIdFromLog(logFile: string): string | null {
   const patterns = [
     /Print mode: conversation=([a-f0-9-]{36})/i,
     /Created conversation ([a-f0-9-]{36})/i,
+    /conversationID="([a-f0-9-]{36})"/i,
     /Streaming conversation ([a-f0-9-]{36})/i,
   ];
   for (const re of patterns) {

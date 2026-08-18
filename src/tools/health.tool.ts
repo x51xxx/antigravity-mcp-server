@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { UnifiedTool, StructuredToolResult } from "./registry.js";
 import { executeCommand } from "../utils/commandExecutor.js";
+import { fetchModels } from "../utils/modelList.js";
 import { getSessionStats, getSession } from "../utils/sessionStorage.js";
 import { Logger } from "../utils/logger.js";
 
@@ -49,15 +50,11 @@ async function getAgyVersion(): Promise<string> {
 
 /**
  * `agy models` requires a valid login (it queries the backend for available
- * models), so a successful call doubles as an authentication check.
+ * models), so a non-empty result doubles as an authentication check.
  */
 async function getModels(): Promise<string[]> {
   try {
-    const result = await executeCommand("agy", ["models"], undefined, 30000);
-    return result
-      .split("\n")
-      .map((l) => l.trim())
-      .filter(Boolean);
+    return (await fetchModels()).map((m) => m.label);
   } catch {
     return [];
   }

@@ -2,6 +2,7 @@
  * Structured error types for Antigravity MCP server.
  * Categories with friendly titles, descriptions, and recommended fixes.
  */
+import { DEFAULT_MODEL, MODELS } from "../constants.js";
 
 export enum ErrorCategory {
   CLI_NOT_FOUND = "CLI_NOT_FOUND",
@@ -69,12 +70,12 @@ export const ERROR_SOLUTIONS: Record<ErrorCategory, string[]> = {
   ],
   [ErrorCategory.MODEL]: [
     "Omit the model parameter to use your Antigravity CLI default",
-    'Use the exact display label from `agy models`, e.g. "Gemini 3.5 Flash (High)"',
+    `Use an exact id or display label from \`agy models\`, e.g. "${DEFAULT_MODEL}" (run the list-models tool to see the matching id)`,
     "Labels change between CLI releases — re-check after `agy update`",
   ],
   [ErrorCategory.RATE_LIMIT]: [
     "Wait a few minutes before retrying",
-    "Consider using a smaller / faster model (e.g. Gemini 3.5 Flash (Low))",
+    `Consider using a smaller / faster model (e.g. ${MODELS.GEMINI_3_7_FLASH_LOW})`,
   ],
   [ErrorCategory.TIMEOUT]: [
     "Increase timeout: `timeout: 600000` (10 minutes)",

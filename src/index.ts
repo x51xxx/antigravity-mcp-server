@@ -31,11 +31,12 @@ import {
   getPromptMessage,
 } from "./tools/index.js";
 import { getCompletionValues } from "./utils/completions.js";
+import { SERVER_VERSION } from "./version.js";
 
 const server = new Server(
   {
     name: "antigravity-mcp",
-    version: "0.1.0",
+    version: SERVER_VERSION,
   },
   {
     capabilities: {

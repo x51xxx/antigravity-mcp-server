@@ -1,6 +1,11 @@
 import { z } from "zod";
 import { UnifiedTool, StructuredToolResult } from "./registry.js";
-import { executeCommand } from "../utils/commandExecutor.js";
+import {
+  executeCommand,
+  executeCommandDetailed,
+} from "../utils/commandExecutor.js";
+import { fetchModels } from "../utils/modelList.js";
+import { SERVER_NAME, SERVER_VERSION } from "../version.js";
 
 const pingArgsSchema = z.object({
   prompt: z.string().default("").describe("Message to echo"),
@@ -34,7 +39,11 @@ export const helpTool: UnifiedTool = {
   prompt: { description: "Receive help information" },
   category: "simple",
   execute: async (_args, onProgress) => {
-    return executeCommand("agy", ["--help"], onProgress);
+    // `agy --help` writes to stderr (and exits non-zero), so read both streams.
+    const result = await executeCommandDetailed("agy", ["--help"], {
+      onProgress,
+    });
+    return `${result.stdout}${result.stderr}`.trim() || "(no help output)";
   },
 };
 
@@ -66,7 +75,7 @@ export const versionTool: UnifiedTool = {
   execute: async (_args, onProgress) => {
     const nodeVersion = process.version;
     const platform = process.platform;
-    const mcpServer = "@trishchuk/antigravity-mcp-server v0.1.0";
+    const mcpServer = `${SERVER_NAME} v${SERVER_VERSION}`;
 
     try {
       const agyVersion = await executeCommand("agy", ["--version"], onProgress);
@@ -119,23 +128,26 @@ export const listModelsTool: UnifiedTool = {
     type: "object",
     properties: {
       models: { type: "array", items: { type: "string" } },
+      modelIds: { type: "array", items: { type: "string" } },
     },
     required: ["models"],
   },
   prompt: { description: "List available Antigravity models" },
   category: "simple",
   execute: async (_args, onProgress) => {
-    const output = await executeCommand("agy", ["models"], onProgress, 30000);
-    const models = output
-      .split("\n")
-      .map((l) => l.trim())
-      .filter(Boolean);
+    const entries = await fetchModels(onProgress);
+    const models = entries.map((m) => m.label);
+    const modelIds = entries.map((m) => m.id).filter(Boolean);
     return {
       text:
-        models.length > 0
-          ? `**Available models:**\n${models.map((m) => `- ${m}`).join("\n")}`
+        entries.length > 0
+          ? `**Available models:**\n${entries
+              .map((m) =>
+                m.id ? `- ${m.label} — \`${m.id}\`` : `- ${m.label}`,
+              )
+              .join("\n")}\n\nPass either the label or the ID as \`model\`.`
           : "(no models returned — is agy authenticated?)",
-      structuredContent: { models },
+      structuredContent: { models, modelIds },
     } as StructuredToolResult;
   },
 };

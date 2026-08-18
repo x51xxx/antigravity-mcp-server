@@ -7,10 +7,10 @@ import { join } from "path";
 import { randomBytes } from "crypto";
 
 /**
- * Options accepted by AgyCommandBuilder. Verified against `agy --help` v1.0.7.
+ * Options accepted by AgyCommandBuilder. Verified against `agy --help` v1.1.14.
  */
 export interface AgyCommandBuilderOptions {
-  /** Model display label from `agy models`, e.g. "Gemini 3.5 Flash (High)". */
+  /** Model id or display label from `agy models`, e.g. "Gemini 3.7 Flash (High)". */
   readonly model?: string;
   /** --dangerously-skip-permissions: auto-approve all tool permission requests. */
   readonly skipPermissions?: boolean;

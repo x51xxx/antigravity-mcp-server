@@ -10,10 +10,11 @@ export interface AgyOutput {
 }
 
 /**
- * Antigravity CLI print mode emits plain text on stdout (no JSONL stream
- * format as of v1.0.7). When resuming a conversation, the CLI may replay the
- * previous assistant message before the new one — both end up on stdout; we
- * keep everything and let "clean" mode return it verbatim.
+ * Antigravity CLI print mode emits plain text on stdout. v1.1.x also offers
+ * `--output-format json|stream-json`, which this server does not use yet.
+ * v1.0.x replayed the previous assistant message before the new one when
+ * resuming a conversation; v1.1.14 no longer does. Either way both end up on
+ * stdout — we keep everything and let "clean" mode return it verbatim.
  */
 export function parseAgyOutput(
   rawStdout: string,
