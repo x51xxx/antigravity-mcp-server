@@ -152,7 +152,11 @@ export async function startBgTask(
   try {
     const child = spawn("agy", args, {
       cwd: workingDir,
-      detached: true,
+      // On Windows `detached` means DETACHED_PROCESS: agy gets no console, so
+      // every console child it starts (PowerShell for tool commands) opens a
+      // new visible window. Without it agy shares one hidden console instead.
+      detached: process.platform !== "win32",
+      windowsHide: true,
       stdio: ["pipe", logFd, logFd],
       env: process.env,
     });

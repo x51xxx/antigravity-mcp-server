@@ -104,6 +104,7 @@ async function executeOnce(
     const childProcess = spawn(command, args, {
       env: process.env,
       shell: false,
+      windowsHide: true,
       stdio: [stdin !== undefined ? "pipe" : "ignore", "pipe", "pipe"],
       ...(cwd ? { cwd } : {}),
     });
