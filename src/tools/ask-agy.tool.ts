@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { UnifiedTool } from "./registry.js";
+import { UnifiedTool, toolError } from "./registry.js";
 import { executeAgy } from "../utils/agyExecutor.js";
 import {
   formatAgyResponseForMCP,
@@ -16,6 +16,7 @@ import {
   withSessionLock,
 } from "../utils/sessionStorage.js";
 import { resolveWorkingDirectory } from "../utils/workingDirResolver.js";
+import { effortSchema, modeSchema } from "./sharedSchemas.js";
 
 const askAgyArgsSchema = z.object({
   prompt: z
@@ -28,10 +29,12 @@ const askAgyArgsSchema = z.object({
     .string()
     .optional()
     .describe(
-      `Optional model override (display label from \`agy models\`). Known: ${Object.values(
+      `Optional model override (ID or display label from \`agy models\`). Known: ${Object.values(
         MODELS,
       ).join(", ")}. If omitted, uses your Antigravity CLI default.`,
     ),
+  effort: effortSchema,
+  mode: modeSchema,
   skipPermissions: z
     .boolean()
     .optional()
@@ -77,6 +80,8 @@ const askAgyArgsSchema = z.object({
   // Output shaping
   timeout: z
     .number()
+    .int()
+    .positive()
     .optional()
     .describe("Maximum execution time in milliseconds (default 600000)"),
   responseMode: z
@@ -111,6 +116,8 @@ export const askAgyTool: UnifiedTool = {
     const {
       prompt,
       model,
+      effort,
+      mode,
       skipPermissions,
       sandbox,
       cd,
@@ -137,11 +144,7 @@ export const askAgyTool: UnifiedTool = {
       let activeSessionId: string | undefined;
 
       if (sessionId) {
-        if (resetSession) {
-          deleteSession(sessionId as string);
-        } else if (!conversationId) {
-          conversationId = getConversationId(sessionId as string);
-        }
+        if (resetSession) deleteSession(sessionId as string);
         activeSessionId = sessionId as string;
       }
 
@@ -150,12 +153,15 @@ export const askAgyTool: UnifiedTool = {
         prompt: prompt as string,
       });
 
-      let previousResponse: string | undefined;
+      // Look the conversation up only after getOrCreateSession has checked the
+      // workspace: a sessionId reused in another repo gets a fresh session, and
+      // reading its conversation ID earlier would resume the other repo's chat.
       if (activeSessionId && resolvedWorkingDir) {
         const session = getOrCreateSession(resolvedWorkingDir, activeSessionId);
         activeSessionId = session.sessionId;
-        if (!conversationId) conversationId = session.conversationId;
-        previousResponse = session.lastResponse || undefined;
+        conversationId ??= session.conversationId;
+      } else if (activeSessionId) {
+        conversationId ??= getConversationId(activeSessionId);
       }
 
       try {
@@ -163,10 +169,12 @@ export const askAgyTool: UnifiedTool = {
           prompt as string,
           {
             model: model as string,
+            effort: effort as string | undefined,
+            mode: mode as string | undefined,
             skipPermissions: Boolean(skipPermissions),
             sandbox: Boolean(sandbox),
             cd: cd as string,
-            workingDir: workingDir as string,
+            workingDir: resolvedWorkingDir,
             addDirs: addDirs as string[] | undefined,
             conversationId,
             continueLatest: Boolean(continueLatest),
@@ -176,21 +184,10 @@ export const askAgyTool: UnifiedTool = {
           onProgress,
         );
 
-        // When resuming, agy print mode replays the previous assistant message
-        // before the new one. Strip it when we know the full prior response
-        // (lastResponse is stored truncated at 1000 chars — only strip when
-        // it was short enough to be complete).
-        let outputText = result.output;
-        if (
-          conversationId &&
-          previousResponse &&
-          previousResponse.length < 1000 &&
-          outputText.startsWith(previousResponse)
-        ) {
-          outputText = outputText
-            .slice(previousResponse.length)
-            .replace(/^\n+/, "");
-        }
+        // agy 1.0.x replayed the previous answer on resume; 1.1.14+ does
+        // not, and stripping a "replayed" prefix could eat the start of a
+        // genuine answer, so the output is used verbatim.
+        const outputText = result.output;
 
         if (activeSessionId) {
           if (result.conversationId) {
@@ -219,7 +216,7 @@ export const askAgyTool: UnifiedTool = {
             workingDir: resolvedWorkingDir,
           },
         );
-        return `❌ ${formatErrorForUser(agyErr)}`;
+        return toolError(`❌ ${formatErrorForUser(agyErr)}`);
       }
     });
   },

@@ -31,6 +31,7 @@ import {
   getPromptMessage,
 } from "./tools/index.js";
 import { getCompletionValues } from "./utils/completions.js";
+import { runWithAbortSignal } from "./utils/commandExecutor.js";
 import { SERVER_VERSION } from "./version.js";
 
 const server = new Server(
@@ -54,7 +55,7 @@ async function sendProgressNotification(
   total?: number,
   message?: string,
 ) {
-  if (!progressToken) return;
+  if (progressToken === undefined) return;
   try {
     const params: any = { progressToken, progress };
     if (total !== undefined) params.total = total;
@@ -89,7 +90,7 @@ function startProgressUpdates(
   let messageIndex = 0;
   let progress = 0;
 
-  if (progressToken) {
+  if (progressToken !== undefined) {
     sendProgressNotification(
       progressToken,
       0,
@@ -99,7 +100,7 @@ function startProgressUpdates(
   }
 
   const progressInterval = setInterval(async () => {
-    if (state.isProcessing && progressToken) {
+    if (state.isProcessing && progressToken !== undefined) {
       progress += 1;
       const baseMessage =
         progressMessages[messageIndex % progressMessages.length];
@@ -134,7 +135,7 @@ function stopProgressUpdates(
   if (progressData.state) progressData.state.isProcessing = false;
   clearInterval(progressData.interval);
 
-  if (progressData.progressToken) {
+  if (progressData.progressToken !== undefined) {
     sendProgressNotification(
       progressData.progressToken,
       100,
@@ -166,7 +167,7 @@ server.setRequestHandler(
 
 server.setRequestHandler(
   CallToolRequestSchema,
-  async (request: CallToolRequest): Promise<CallToolResult> => {
+  async (request: CallToolRequest, extra): Promise<CallToolResult> => {
     const toolName: string = request.params.name;
 
     if (toolExists(toolName)) {
@@ -178,16 +179,29 @@ server.setRequestHandler(
           (request.params.arguments as ToolArguments) || {};
         Logger.toolInvocation(toolName, request.params.arguments);
 
-        const result = await executeTool(toolName, args, (newOutput) => {
-          if (progressData.state) progressData.state.latestOutput = newOutput;
-        });
+        // Tie every process spawned for this call to the request's abort
+        // signal, so a cancelled call does not leave agy running.
+        const result = await runWithAbortSignal(extra.signal, () =>
+          executeTool(toolName, args, (newOutput) => {
+            if (progressData.state) progressData.state.latestOutput = newOutput;
+          }),
+        );
 
-        stopProgressUpdates(progressData, true);
+        // An expected failure comes back as toolError ({ isError: true }), not
+        // as a throw — report it as failed in the final progress notification.
+        const failed = typeof result !== "string" && "isError" in result;
+        stopProgressUpdates(progressData, !failed);
 
         if (typeof result === "string") {
           return {
             content: [{ type: "text", text: result }],
             isError: false,
+          };
+        }
+        if ("isError" in result) {
+          return {
+            content: [{ type: "text", text: result.text }],
+            isError: true,
           };
         }
         return {

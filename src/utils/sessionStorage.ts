@@ -96,8 +96,9 @@ export function saveSession(
     sessionId: data.sessionId,
     workspaceId: data.workspaceId || existing?.workspaceId || "",
     conversationId: data.conversationId || existing?.conversationId,
-    lastPrompt: data.lastPrompt || existing?.lastPrompt || "",
-    lastResponse: data.lastResponse || existing?.lastResponse || "",
+    // ?? not ||: an empty answer must replace the previous turn's, not keep it.
+    lastPrompt: data.lastPrompt ?? existing?.lastPrompt ?? "",
+    lastResponse: data.lastResponse ?? existing?.lastResponse ?? "",
     model: data.model || existing?.model,
     workingDir: data.workingDir || existing?.workingDir,
     createdAt: existing?.createdAt || now,
@@ -135,7 +136,24 @@ export function getOrCreateSession(
   const workspaceId = generateWorkspaceId(workingDir);
   if (sessionId) {
     const existing = getSession(sessionId);
-    if (existing) return existing;
+    // Compare repositories, not workspaceIds: the workspaceId hashes
+    // .git/HEAD, so a branch switch or commit would otherwise drop the chat.
+    const repoOf = (dir: string) => findGitRoot(dir) || dir;
+    if (
+      existing &&
+      existing.workingDir &&
+      repoOf(existing.workingDir) !== repoOf(workingDir)
+    ) {
+      // The same sessionId used in another workspace must not resume that
+      // workspace's conversation here (agy would continue a chat about a
+      // different repo, in this cwd). Start a fresh session instead.
+      Logger.warn(
+        `Session "${sessionId}" belonged to ${existing.workingDir ?? existing.workspaceId}; starting a fresh conversation for ${workingDir}.`,
+      );
+      sessionStore.delete(sessionId);
+    } else if (existing) {
+      return existing;
+    }
     return saveSession({
       sessionId,
       workspaceId,

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { UnifiedTool, StructuredToolResult } from "./registry.js";
+import { UnifiedTool, StructuredToolResult, toolError } from "./registry.js";
 import { executeCommand } from "../utils/commandExecutor.js";
 import { fetchModels } from "../utils/modelList.js";
 import { getSessionStats, getSession } from "../utils/sessionStorage.js";
@@ -230,7 +230,9 @@ export const healthTool: UnifiedTool = {
     } catch (error) {
       Logger.error("Health check failed:", error);
       const msg = error instanceof Error ? error.message : String(error);
-      return `❌ **Health Check Failed**\n\nError: ${msg}\n\nThis may indicate Antigravity CLI is not properly installed.`;
+      return toolError(
+        `❌ **Health Check Failed**\n\nError: ${msg}\n\nThis may indicate Antigravity CLI is not properly installed.`,
+      );
     }
   },
 };

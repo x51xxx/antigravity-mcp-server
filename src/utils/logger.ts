@@ -12,16 +12,40 @@ const LEVEL_ORDER: Record<LoggingLevel, number> = {
   emergency: 7,
 };
 
-const LEVEL_CONSOLE_METHOD: Record<LoggingLevel, "log" | "warn" | "error"> = {
-  debug: "log",
-  info: "log",
-  notice: "log",
+// stdout carries the MCP JSON-RPC stream (stdio transport), so every level
+// must go to stderr — console.log would corrupt the protocol as soon as a
+// client lowered the log level to info or debug.
+const LEVEL_CONSOLE_METHOD: Record<LoggingLevel, "warn" | "error"> = {
+  debug: "error",
+  info: "error",
+  notice: "error",
   warning: "warn",
   error: "error",
   critical: "error",
   alert: "error",
   emergency: "error",
 };
+
+const MAX_LOGGED_STRING = 200;
+
+/**
+ * Copy of a value for logging with every long string cut down. Tool arguments
+ * and argv carry whole prompts (code, diffs, file contents), which do not
+ * belong in a client's log.
+ */
+export function truncateForLog(value: unknown, depth = 0): unknown {
+  if (typeof value === "string") {
+    return value.length > MAX_LOGGED_STRING
+      ? `${value.slice(0, MAX_LOGGED_STRING)}…[${value.length} chars]`
+      : value;
+  }
+  if (depth > 5 || value === null || typeof value !== "object") return value;
+  if (Array.isArray(value))
+    return value.map((v) => truncateForLog(v, depth + 1));
+  return Object.fromEntries(
+    Object.entries(value).map(([k, v]) => [k, truncateForLog(v, depth + 1)]),
+  );
+}
 
 export class Logger {
   private static currentLevel: LoggingLevel = "warning";
@@ -67,8 +91,8 @@ export class Logger {
 
   static toolInvocation(toolName: string, args: any): void {
     this.debug(
-      `Raw args for tool '${toolName}':`,
-      JSON.stringify(args, null, 2),
+      `Args for tool '${toolName}':`,
+      JSON.stringify(truncateForLog(args), null, 2),
     );
   }
 
@@ -77,16 +101,13 @@ export class Logger {
     args: string[],
     startTime: number,
   ): void {
-    this.warn(
-      `[${startTime}] Starting: ${command} ${args.map((a) => `"${a}"`).join(" ")}`,
+    // Debug only, and truncated: argv carries the full prompt (code, diffs,
+    // file contents), which does not belong in a client's log at warn level.
+    const shown = args.map((a) => truncateForLog(a) as string);
+    this.debug(
+      `[${startTime}] Starting: ${command} ${shown.map((a) => `"${a}"`).join(" ")}`,
     );
-    this._commandStartTimes.set(startTime, { command, args, startTime });
   }
-
-  private static _commandStartTimes = new Map<
-    number,
-    { command: string; args: string[]; startTime: number }
-  >();
 
   static commandComplete(
     startTime: number,
@@ -94,11 +115,10 @@ export class Logger {
     outputLength?: number,
   ): void {
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-    this.warn(`[${elapsed}s] Process finished with exit code: ${exitCode}`);
+    this.debug(`[${elapsed}s] Process finished with exit code: ${exitCode}`);
     if (outputLength !== undefined) {
-      this.warn(`Response: ${outputLength} chars`);
+      this.debug(`Response: ${outputLength} chars`);
     }
-    this._commandStartTimes.delete(startTime);
   }
 
   static agyResponse(response: string, tokensUsed?: number): void {

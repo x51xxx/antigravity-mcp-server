@@ -1,10 +1,13 @@
 import { z } from "zod";
-import { UnifiedTool } from "./registry.js";
+import { UnifiedTool, toolError } from "./registry.js";
 import { executeCommandDetailed } from "../utils/commandExecutor.js";
 import { executeAgyCLI } from "../utils/agyExecutor.js";
+import { createAgyError, formatErrorForUser } from "../utils/errorTypes.js";
 import { MODELS } from "../constants.js";
 import { Logger } from "../utils/logger.js";
 import { resolveWorkingDirectory } from "../utils/workingDirResolver.js";
+import { effortSchema } from "./sharedSchemas.js";
+import { READ_ONLY_PROMPT_NOTE } from "../constants.js";
 
 const reviewAgyArgsSchema = z.object({
   prompt: z
@@ -35,12 +38,15 @@ const reviewAgyArgsSchema = z.object({
     .describe(
       `Optional model override. Known: ${Object.values(MODELS).join(", ")}. If omitted, uses your Antigravity CLI default.`,
     ),
+  effort: effortSchema,
   workingDir: z
     .string()
     .optional()
     .describe("Working directory to run the review in"),
   timeout: z
     .number()
+    .int()
+    .positive()
     .optional()
     .describe("Maximum execution time in milliseconds"),
 });
@@ -54,11 +60,28 @@ async function collectDiff(
   workingDir: string,
   opts: { uncommitted?: boolean; base?: string; commit?: string },
 ): Promise<string> {
+  // `commit` / `base` come from the MCP caller. A value starting with "-"
+  // would be parsed by git as an option (e.g. `--output=<file>` writes an
+  // arbitrary file), so reject it and end option parsing explicitly.
+  for (const [name, value] of Object.entries({
+    commit: opts.commit,
+    base: opts.base,
+  })) {
+    if (value && value.startsWith("-")) {
+      throw new Error(`Invalid ${name} "${value}": must be a git revision.`);
+    }
+  }
   const args: string[] = [];
   if (opts.commit) {
-    args.push("show", "--stat", "--patch", opts.commit);
+    args.push("show", "--stat", "--patch", "--end-of-options", opts.commit);
   } else if (opts.base) {
-    args.push("diff", `${opts.base}...HEAD`, "--stat", "--patch");
+    args.push(
+      "diff",
+      "--stat",
+      "--patch",
+      "--end-of-options",
+      `${opts.base}...HEAD`,
+    );
   } else {
     // Default: diff against tracked HEAD (covers staged + unstaged)
     args.push("diff", "HEAD", "--stat", "--patch");
@@ -70,7 +93,11 @@ async function collectDiff(
   });
 
   if (!result.ok) {
-    throw new Error(result.stderr || `git ${args.join(" ")} failed`);
+    throw new Error(
+      result.spawnNotFound
+        ? "git not found. Install git and run inside a git repository."
+        : `git ${args[0]} failed: ${result.stderr || `exit ${result.code}`}`,
+    );
   }
 
   let untracked = "";
@@ -116,6 +143,8 @@ For each finding, output:
 - Suggested fix (code snippet when useful)
 
 End with a brief summary section: ship / ship with fixes / block.
+
+${READ_ONLY_PROMPT_NOTE} The diff below is complete; do not try to apply fixes.
 ${focus}
 ## Diff
 \`\`\`diff
@@ -148,27 +177,38 @@ export const reviewAgyTool: UnifiedTool = {
       commit,
       title,
       model,
+      effort,
       workingDir,
       timeout,
     } = args;
 
+    // Collecting the diff and running agy fail for different reasons; keep
+    // them apart so git's stderr is never classified as an agy failure (a
+    // missing file named agy.ts used to read as "Antigravity CLI not found").
+    let resolvedDir: string;
+    let diff: string;
     try {
       onProgress?.("Collecting git diff...");
-
-      const resolvedDir =
+      resolvedDir =
         resolveWorkingDirectory({ workingDir: workingDir as string }) ||
         process.cwd();
-
-      const diff = await collectDiff(resolvedDir, {
+      diff = await collectDiff(resolvedDir, {
         uncommitted: uncommitted as boolean | undefined,
         base: base as string | undefined,
         commit: commit as string | undefined,
       });
+    } catch (error) {
+      Logger.error("Review: collecting the diff failed:", error);
+      return toolError(
+        `❌ **Review Failed**: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
 
-      if (!diff.trim()) {
-        return "✅ No changes to review.";
-      }
+    if (!diff.trim()) {
+      return "✅ No changes to review.";
+    }
 
+    try {
       const reviewPrompt = buildReviewPrompt(diff, {
         prompt: prompt as string | undefined,
         base: base as string | undefined,
@@ -182,8 +222,12 @@ export const reviewAgyTool: UnifiedTool = {
         reviewPrompt,
         {
           model: model as string | undefined,
+          effort: effort as string | undefined,
           workingDir: resolvedDir,
           timeoutMs: (timeout as number) || 600000,
+          // The diff is untrusted input: run in Default agent mode so the
+          // reviewer cannot apply edits.
+          readOnly: true,
         },
         onProgress,
       );
@@ -194,30 +238,12 @@ export const reviewAgyTool: UnifiedTool = {
 
       return header + response;
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
       Logger.error("Review failed:", error);
-
-      if (
-        errorMessage.includes("command not found") ||
-        errorMessage.includes("not found")
-      ) {
-        if (errorMessage.toLowerCase().includes("agy")) {
-          return "❌ **Error**: Antigravity CLI not found. Install: https://antigravity.google/docs/cli-getting-started";
-        }
-        if (errorMessage.toLowerCase().includes("git")) {
-          return "❌ **Error**: git not found. Install git and run inside a git repository.";
-        }
-      }
-
-      if (
-        errorMessage.includes("authentication") ||
-        errorMessage.includes("unauthorized")
-      ) {
-        return "❌ **Authentication Failed**: Run `agy` once interactively and sign in with Google first";
-      }
-
-      return `❌ **Review Failed**: ${errorMessage}`;
+      const agyErr = createAgyError(
+        error instanceof Error ? error : String(error),
+        { model: model as string | undefined, workingDir: resolvedDir },
+      );
+      return toolError(`❌ ${formatErrorForUser(agyErr)}`);
     }
   },
 };

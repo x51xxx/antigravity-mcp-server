@@ -1,8 +1,11 @@
 import { z } from "zod";
-import { UnifiedTool } from "./registry.js";
+import { UnifiedTool, toolError } from "./registry.js";
+import { agyFailureText } from "../utils/errorTypes.js";
 import { Logger } from "../utils/logger.js";
 import { executeAgyCLI } from "../utils/agyExecutor.js";
 import { MODELS } from "../constants.js";
+import { effortSchema } from "./sharedSchemas.js";
+import { READ_ONLY_PROMPT_NOTE } from "../constants.js";
 
 function buildBrainstormPrompt(config: {
   prompt: string;
@@ -51,6 +54,8 @@ Rate each: Feasibility (1-5), Impact (1-5), Innovation (1-5)`
 ### Idea [N]: [Name]
 Description: [2-3 sentences]
 ${includeAnalysis ? "Ratings: F:[1-5] I:[1-5] N:[1-5]" : ""}
+
+${READ_ONLY_PROMPT_NOTE}
 
 Begin:`;
 }
@@ -115,6 +120,7 @@ const brainstormArgsSchema = z.object({
     .describe(
       `Optional model override. Known: ${Object.values(MODELS).join(", ")}. If omitted, uses your Antigravity CLI default.`,
     ),
+  effort: effortSchema,
   cd: z.string().optional().describe("Working directory"),
   methodology: z
     .enum([
@@ -161,7 +167,8 @@ export const brainstormTool: UnifiedTool = {
     "Generate creative ideas using structured frameworks with domain context and feasibility analysis.",
   zodSchema: brainstormArgsSchema,
   annotations: {
-    readOnlyHint: false,
+    readOnlyHint: true,
+    destructiveHint: false,
     openWorldHint: true,
   },
   prompt: {
@@ -173,6 +180,7 @@ export const brainstormTool: UnifiedTool = {
     const {
       prompt,
       model,
+      effort,
       cd,
       methodology = "auto",
       domain,
@@ -206,13 +214,19 @@ export const brainstormTool: UnifiedTool = {
       `Generating ${ideaCount} ideas via ${methodology} methodology...`,
     );
 
-    return await executeAgyCLI(
-      enhancedPrompt,
-      {
-        model: model as string | undefined,
-        cd: cd as string | undefined,
-      },
-      onProgress,
-    );
+    try {
+      return await executeAgyCLI(
+        enhancedPrompt,
+        {
+          model: model as string | undefined,
+          effort: effort as string | undefined,
+          cd: cd as string | undefined,
+          readOnly: true,
+        },
+        onProgress,
+      );
+    } catch (error) {
+      return toolError(agyFailureText(error, { model }));
+    }
   },
 };

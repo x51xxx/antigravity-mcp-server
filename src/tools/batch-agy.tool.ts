@@ -1,7 +1,9 @@
 import { z } from "zod";
-import { UnifiedTool, StructuredToolResult } from "./registry.js";
+import { defaultSkipPermissions } from "../utils/agyCommandBuilder.js";
+import { UnifiedTool, StructuredToolResult, toolError } from "./registry.js";
 import { executeAgy } from "../utils/agyExecutor.js";
 import { MODELS } from "../constants.js";
+import { effortSchema, modeSchema } from "./sharedSchemas.js";
 
 const batchTaskSchema = z.object({
   task: z.string().describe("Atomic task description"),
@@ -35,11 +37,13 @@ const batchAgyArgsSchema = z.object({
     .describe(
       `Optional model override applied to every task. Known: ${Object.values(MODELS).join(", ")}.`,
     ),
+  effort: effortSchema,
+  mode: modeSchema,
   skipPermissions: z
     .boolean()
-    .default(true)
+    .optional()
     .describe(
-      "--dangerously-skip-permissions (typical for batch jobs — print mode can't answer prompts)",
+      "--dangerously-skip-permissions. Default: true (print mode can't answer prompts), false when `mode` is set. Not allowed with mode plan.",
     ),
   parallel: z
     .boolean()
@@ -60,6 +64,8 @@ const batchAgyArgsSchema = z.object({
     .describe("Stop execution if any task fails"),
   timeout: z
     .number()
+    .int()
+    .positive()
     .optional()
     .describe("Maximum execution time per task in milliseconds"),
   workingDir: z.string().optional().describe("Working directory for execution"),
@@ -95,6 +101,8 @@ export const batchAgyTool: UnifiedTool = {
     const {
       tasks,
       model,
+      effort,
+      mode,
       skipPermissions,
       parallel,
       concurrency,
@@ -122,14 +130,14 @@ export const batchAgyTool: UnifiedTool = {
     let skippedCount = 0;
 
     if (onProgress) {
-      const mode = parallel
+      const runLabel = parallel
         ? `parallel mode (concurrency ${Math.min(
             (concurrency as number | undefined) ?? 4,
             sortedTasks.length,
           )})`
         : "sequential mode";
       onProgress(
-        `🚀 Starting batch execution of ${sortedTasks.length} tasks in ${mode}...`,
+        `🚀 Starting batch execution of ${sortedTasks.length} tasks in ${runLabel}...`,
       );
     }
 
@@ -149,7 +157,11 @@ export const batchAgyTool: UnifiedTool = {
           taskPrompt,
           {
             model: model as string,
-            skipPermissions: Boolean(skipPermissions),
+            effort: effort as string | undefined,
+            mode: mode as string | undefined,
+            skipPermissions:
+              (skipPermissions as boolean | undefined) ??
+              defaultSkipPermissions(mode as string | undefined),
             timeout: timeout as number,
             workingDir: workingDir as string,
           },
@@ -249,9 +261,7 @@ export const batchAgyTool: UnifiedTool = {
     }
 
     if (failedCount === sortedTasks.length) {
-      throw new Error(
-        `All ${failedCount} tasks failed. See report above for details.`,
-      );
+      return toolError(`❌ All ${failedCount} tasks failed.\n${report}`);
     }
 
     return {

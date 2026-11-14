@@ -71,19 +71,22 @@ export function extractPathFromAtSyntax(
 ): string[] {
   const paths: string[] = [];
 
-  const quotedPathRegex = /@["']([^"']+)["']/g;
+  // An @ glued to a preceding word character is an e-mail address or similar
+  // (user@host/path), not a file reference.
+  const quotedPathRegex = /(?<![\w.%+-])@["']([^"']+)["']/g;
   let match;
   while ((match = quotedPathRegex.exec(prompt)) !== null) {
     const p = match[1];
     paths.push(isAbsolute(p) ? p : resolve(baseDir, p));
   }
 
-  const absolutePathRegex = /@(\/[^\s"']+)/g;
+  const absolutePathRegex = /(?<![\w.%+-])@(\/[^\s"']+)/g;
   while ((match = absolutePathRegex.exec(prompt)) !== null) {
     paths.push(match[1]);
   }
 
-  const relativePathRegex = /@(\.{1,2}\/[^\s"']+|[a-zA-Z0-9_-]+\/[^\s"']+)/g;
+  const relativePathRegex =
+    /(?<![\w.%+-])@(\.{1,2}\/[^\s"']+|[a-zA-Z0-9_-]+\/[^\s"']+)/g;
   while ((match = relativePathRegex.exec(prompt)) !== null) {
     paths.push(resolve(baseDir, match[1]));
   }
@@ -110,17 +113,24 @@ export function resolveWorkingDirectory(options?: {
   if (workingDir) {
     const validDir = ensureDirectory(workingDir, baseDir);
     if (validDir) return validDir;
-    Logger.warn(`Explicit workingDir is invalid: ${workingDir}`);
+    // Never fall back silently: running an agent (possibly with
+    // --dangerously-skip-permissions) in a different directory than the
+    // caller asked for is worse than failing.
+    throw new Error(
+      `Working directory does not exist: ${workingDir} (resolved against ${baseDir})`,
+    );
   }
 
-  const envVars = ["AGY_MCP_CWD", "PWD", "INIT_CWD"] as const;
-  for (const envVar of envVars) {
-    const envValue = process.env[envVar];
-    if (envValue) {
-      const validDir = ensureDirectory(envValue, process.cwd());
-      if (validDir) return validDir;
-    }
-  }
+  // Order: explicit workingDir → AGY_MCP_CWD (explicit config) → @path in the
+  // prompt → the server's launch dir (PWD / INIT_CWD). PWD is practically
+  // always set, so checking it before @path made @path references dead code.
+  const fromEnv = (name: "AGY_MCP_CWD" | "PWD" | "INIT_CWD") => {
+    const v = process.env[name];
+    return v ? ensureDirectory(v, process.cwd()) : null;
+  };
+
+  const configured = fromEnv("AGY_MCP_CWD");
+  if (configured) return configured;
 
   if (prompt) {
     const paths = extractPathFromAtSyntax(prompt, baseDir);
@@ -132,5 +142,5 @@ export function resolveWorkingDirectory(options?: {
     }
   }
 
-  return process.cwd();
+  return fromEnv("PWD") || fromEnv("INIT_CWD") || process.cwd();
 }

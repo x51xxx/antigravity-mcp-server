@@ -1,8 +1,9 @@
 import { z } from "zod";
-import { UnifiedTool } from "./registry.js";
-import { executeAgy } from "../utils/agyExecutor.js";
+import { UnifiedTool, toolError } from "./registry.js";
+import { executeAgy, emptyResponseNote } from "../utils/agyExecutor.js";
 import { formatAgyResponseForMCP } from "../utils/outputParser.js";
 import { createAgyError, formatErrorForUser } from "../utils/errorTypes.js";
+import { effortSchema } from "./sharedSchemas.js";
 
 const planArgsSchema = z.object({
   goal: z
@@ -31,8 +32,14 @@ const planArgsSchema = z.object({
       "Output shape. json (default) returns structured steps/risks; markdown returns a checklist.",
     ),
   model: z.string().optional(),
+  effort: effortSchema,
   workingDir: z.string().optional(),
-  timeout: z.number().optional(),
+  timeout: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe("Maximum execution time in milliseconds (default 600000)"),
 });
 
 function buildPrompt(args: {
@@ -69,8 +76,8 @@ function buildPrompt(args: {
     `Produce an implementation PLAN ONLY. This is a planning request — the caller will execute the work themselves later.`,
     `\n# STRICT RULES (violating these makes the response useless to the caller)`,
     `1. DO NOT use any file-mutation tool (edit, write, create).`,
-    `2. DO NOT run shell commands that change state (git commits, npm install, builds, tests that mutate, etc.).`,
-    `3. You MAY read files and run read-only commands (e.g., \`ls\`, \`cat\`, \`grep\`) to investigate.`,
+    `2. DO NOT run any shell commands — not even read-only ones like \`ls\` or \`git status\`. They are blocked in this mode, and a blocked call discards your whole answer.`,
+    `3. You MAY read, list and search files with your file tools to investigate.`,
     `4. Even if the task looks small, output the plan instead of doing it.`,
     `5. Output ONLY the structured response specified below — no preamble, no "implementation complete" summary.`,
     `\nIdentify files you would touch, in what order, and the smallest correct change for each. Flag risks and open questions.`,
@@ -132,8 +139,11 @@ export const planAgyTool: UnifiedTool = {
         prompt,
         {
           model: args.model as string | undefined,
+          effort: args.effort as string | undefined,
           workingDir: args.workingDir as string | undefined,
           timeout: args.timeout as number | undefined,
+          // Plan-only: Default agent mode, so writes are auto-denied.
+          readOnly: true,
         },
         onProgress,
       );
@@ -141,6 +151,13 @@ export const planAgyTool: UnifiedTool = {
       const text = result.output.trim();
 
       if (format === "json") {
+        if (!text) {
+          // Usually a denied permission: agy explains it on stderr (exit 0).
+          return {
+            text: emptyResponseNote(result.stderr),
+            structuredContent: { plan: null, raw: "" },
+          };
+        }
         const parsed = tryExtractJson(text);
         if (parsed && typeof parsed === "object") {
           return {
@@ -163,7 +180,7 @@ export const planAgyTool: UnifiedTool = {
           model: args.model as string | undefined,
         },
       );
-      return `❌ ${formatErrorForUser(agyErr)}`;
+      return toolError(`❌ ${formatErrorForUser(agyErr)}`);
     }
   },
 };

@@ -1,4 +1,5 @@
 import { Logger } from "./logger.js";
+import { emptyResponseNote } from "./agyExecutor.js";
 
 export type ResponseMode = "clean" | "full";
 
@@ -49,7 +50,7 @@ export function formatAgyResponseForMCP(
 ): string {
   const parsed = parseAgyOutput(result, stderr);
   if (responseMode === "full") return formatAgyResponseFull(parsed);
-  return parsed.response || "(empty response)";
+  return parsed.response || emptyResponseNote(stderr ?? "");
 }
 
 export function extractCodeBlocks(text: string): string[] {

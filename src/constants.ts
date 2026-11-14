@@ -24,28 +24,125 @@ export const STATUS_MESSAGES = {
   PROCESSING_COMPLETE: "✅ Analysis completed successfully",
 } as const;
 
-// Known Antigravity CLI models (from `agy models`, CLI v1.1.14).
+// Known Antigravity CLI models (from `agy models`, CLI v1.5.9).
 // `agy models` prints `<id>\t<display label>`; `--model` accepts either form,
-// e.g. --model "Gemini 3.7 Flash (High)" or --model gemini-3.7-flash-high.
-// We keep display labels here because they are what the CLI echoes back in
-// its "unknown model" error listing. Run the `list-models` tool for the live
-// list — labels and tiers change between CLI releases.
+// e.g. --model "Gemini 4 Hydrogen (High)" or --model gemini-4-hydrogen-high.
+// A base ID without the effort suffix (gemini-4-hydrogen) plus `--effort` also
+// works; a base *label* ("Gemini 4 Hydrogen") does not. Availability depends on
+// the account plan — run the `list-models` tool for the live list.
 export const MODELS = {
-  GEMINI_3_7_FLASH_LOW: "Gemini 3.7 Flash (Low)",
-  GEMINI_3_7_FLASH_MEDIUM: "Gemini 3.7 Flash (Medium)",
-  GEMINI_3_7_FLASH_HIGH: "Gemini 3.7 Flash (High)",
-  GEMINI_3_6_FLASH_LOW: "Gemini 3.6 Flash (Low)",
-  GEMINI_3_6_FLASH_MEDIUM: "Gemini 3.6 Flash (Medium)",
-  GEMINI_3_6_FLASH_HIGH: "Gemini 3.6 Flash (High)",
-  GEMINI_3_5_FLASH_LOW: "Gemini 3.5 Flash (Low)",
-  GEMINI_3_5_FLASH_MEDIUM: "Gemini 3.5 Flash (Medium)",
-  GEMINI_3_5_FLASH_HIGH: "Gemini 3.5 Flash (High)",
-  GEMINI_3_1_PRO_LOW: "Gemini 3.1 Pro (Low)",
-  GEMINI_3_1_PRO_HIGH: "Gemini 3.1 Pro (High)",
-  CLAUDE_SONNET_4_6_THINKING: "Claude Sonnet 4.6 (Thinking)",
-  CLAUDE_OPUS_4_6_THINKING: "Claude Opus 4.6 (Thinking)",
+  // Gemini 4 Hydrogen — fast everyday coding; the implementer inside Orchestrator.
+  GEMINI_4_HYDROGEN_LOW: "Gemini 4 Hydrogen (Low)",
+  GEMINI_4_HYDROGEN_MEDIUM: "Gemini 4 Hydrogen (Medium)",
+  GEMINI_4_HYDROGEN_HIGH: "Gemini 4 Hydrogen (High)",
+  GEMINI_4_HYDROGEN_XHIGH: "Gemini 4 Hydrogen (XHigh)",
+  // Gemini 4 Argon — deep reasoning; the planner in Orchestrator (Argon).
+  GEMINI_4_ARGON_LOW: "Gemini 4 Argon (Low)",
+  GEMINI_4_ARGON_MEDIUM: "Gemini 4 Argon (Medium)",
+  GEMINI_4_ARGON_HIGH: "Gemini 4 Argon (High)",
+  // Gemini 4 Carbon — maximum-depth reasoning (Ultra / Enterprise only).
+  GEMINI_4_CARBON_LOW: "Gemini 4 Carbon (Low)",
+  GEMINI_4_CARBON_MEDIUM: "Gemini 4 Carbon (Medium)",
+  GEMINI_4_CARBON_HIGH: "Gemini 4 Carbon (High)",
+  // Orchestrator — planner (Argon/Carbon) + Hydrogen implementer in one
+  // conversation. Fixed thinking level: never pass --effort with it.
+  ORCHESTRATOR_ARGON: "Orchestrator (Argon)",
+  ORCHESTRATOR_CARBON: "Orchestrator (Carbon)",
+  GEMINI_3_8_FLASH_LOW: "Gemini 3.8 Flash (Low)",
+  GEMINI_3_8_FLASH_MEDIUM: "Gemini 3.8 Flash (Medium)",
+  GEMINI_3_8_FLASH_HIGH: "Gemini 3.8 Flash (High)",
+  CLAUDE_OPUS_5_5_LOW: "Claude Opus 5.5 (Low)",
+  CLAUDE_OPUS_5_5_MEDIUM: "Claude Opus 5.5 (Medium)",
+  CLAUDE_OPUS_5_5_HIGH: "Claude Opus 5.5 (High)",
+  CLAUDE_SONNET_5_5_LOW: "Claude Sonnet 5.5 (Low)",
+  CLAUDE_SONNET_5_5_MEDIUM: "Claude Sonnet 5.5 (Medium)",
+  CLAUDE_SONNET_5_5_HIGH: "Claude Sonnet 5.5 (High)",
+  // Scheduled for removal on 2026-11-18.
   GPT_OSS_120B_MEDIUM: "GPT-OSS 120B (Medium)",
 } as const;
+
+/**
+ * What each model family is for, per https://antigravity.google/docs/models.
+ * Keyed by the base model ID (the `agy models` ID without its effort suffix).
+ * Only families the docs describe carry a purpose; the effort levels were
+ * verified against CLI v1.5.9 (`--effort` rejects anything else per model).
+ */
+export const MODEL_FAMILIES: Record<
+  string,
+  { name: string; purpose?: string; efforts: readonly string[] }
+> = {
+  "gemini-4-hydrogen": {
+    name: "Gemini 4 Hydrogen",
+    purpose:
+      "Fast everyday coding and maintenance (upgrades, boilerplate, tests, docs) where no separate planning phase is needed. Implementer inside Orchestrator.",
+    efforts: ["low", "medium", "high", "xhigh"],
+  },
+  "gemini-4-argon": {
+    name: "Gemini 4 Argon",
+    purpose:
+      "Maximum reasoning depth on every step; the planner in Orchestrator (Argon).",
+    efforts: ["low", "medium", "high"],
+  },
+  "gemini-4-carbon": {
+    name: "Gemini 4 Carbon",
+    purpose:
+      "Maximum-depth reasoning (e.g. designing complex systems from scratch); the planner in Orchestrator (Carbon). Ultra / Enterprise only.",
+    efforts: ["low", "medium", "high"],
+  },
+  "gemini-pro-orchestrator-g1-pro": {
+    name: "Orchestrator (Argon)",
+    purpose:
+      "Long multi-step tasks: Argon plans and reviews (read-only phase), Hydrogen implements, builds, tests and reports back; control returns to the planner on repeated failures. Single agent, no parallel subagents. Fixed thinking level.",
+    efforts: [],
+  },
+  "gemini-3.8-flash": {
+    name: "Gemini 3.8 Flash",
+    efforts: ["low", "medium", "high"],
+  },
+  "claude-opus-5-5": {
+    name: "Claude Opus 5.5",
+    efforts: ["low", "medium", "high"],
+  },
+  "claude-sonnet-5-5": {
+    name: "Claude Sonnet 5.5",
+    efforts: ["low", "medium", "high"],
+  },
+  "gpt-oss-120b": {
+    name: "GPT-OSS 120B",
+    purpose: "Scheduled for removal on 2026-11-18.",
+    efforts: ["medium"],
+  },
+};
+
+/** Every value `agy --effort` accepts; each model supports a subset. */
+export const EFFORT_LEVELS = ["low", "medium", "high", "xhigh", "max"] as const;
+export type EffortLevel = (typeof EFFORT_LEVELS)[number];
+
+/** Values of `agy --mode`. */
+export const AGENT_MODES = ["accept-edits", "auto", "plan"] as const;
+export type AgentMode = (typeof AGENT_MODES)[number];
+
+/**
+ * Session-only settings overlay (`--settings`) for the read-only tools (plan,
+ * review, digest, brainstorm). Since CLI 1.5.7 headless `-p` runs start in
+ * Auto mode, which edits files without asking.
+ * - `agentMode: ""` forces Default mode: a headless run cannot answer a
+ *   permission prompt, so anything needing approval is auto-denied while the
+ *   answer still goes to stdout (unlike `--mode plan`, which writes it into a
+ *   plan artifact).
+ * - `permissions.allow: []` replaces the user's allow-rules for this run only;
+ *   otherwise a pre-approved command such as `git checkout` still executes
+ *   (verified: it reverted an uncommitted change). Reading workspace files
+ *   keeps working; shell commands, even read-only ones, are denied.
+ */
+/** Prompt line for read-only tools — see READ_ONLY_SETTINGS. */
+export const READ_ONLY_PROMPT_NOTE =
+  "Read-only run: you may read and search files with your file tools, but do NOT run shell commands or edit files — those calls are blocked, and a blocked call discards your whole answer.";
+
+export const READ_ONLY_SETTINGS = JSON.stringify({
+  agentMode: "",
+  permissions: { allow: [] },
+});
 
 // The model this server documents as its default in tool descriptions, error
 // hints and examples. It is deliberately NOT injected into argv: omitting the
@@ -53,7 +150,7 @@ export const MODELS = {
 // (`model` in ~/.gemini/antigravity-cli/settings.json). It drives the model
 // hints in ERROR_SOLUTIONS; the README "Models" section names it too and must
 // be updated by hand.
-export const DEFAULT_MODEL: string = MODELS.GEMINI_3_7_FLASH_HIGH;
+export const DEFAULT_MODEL: string = MODELS.GEMINI_4_HYDROGEN_HIGH;
 
 // MCP Protocol Constants
 export const PROTOCOL = {
@@ -77,7 +174,7 @@ export const PROTOCOL = {
   KEEPALIVE_INTERVAL: 25000, // 25 seconds
 } as const;
 
-// CLI Constants — verified against `agy --help` (Antigravity CLI v1.1.14)
+// CLI Constants — verified against `agy --help` (Antigravity CLI v1.5.9)
 export const CLI = {
   COMMANDS: {
     AGY: "agy",
@@ -85,7 +182,7 @@ export const CLI = {
   FLAGS: {
     // Print mode (non-interactive, required for MCP)
     PRINT: "-p", // also: --print / --prompt
-    PRINT_TIMEOUT: "--print-timeout", // Go duration string, e.g. "5m0s" (default 5m)
+    PRINT_TIMEOUT: "--print-timeout", // Go duration string, e.g. "600s" (default 0s = no limit)
 
     // Model — accepts either column of `agy models` (id or display label)
     MODEL: "--model",
@@ -106,16 +203,20 @@ export const CLI = {
     HELP: "--help",
     VERSION: "--version",
 
-    // Added in 1.1.x — documented here for reference; no tool wires these up yet.
-    EFFORT: "--effort", // reasoning effort: low | medium | high
+    // Model tuning / behaviour
+    EFFORT: "--effort", // low | medium | high | xhigh | max (subset per model)
+    MODE: "--mode", // accept-edits | auto | plan
+    SETTINGS: "--settings", // session-only settings.json overlay (JSON or path)
     OUTPUT_FORMAT: "--output-format", // text | json | stream-json
+
+    // Not wired into any tool yet — reference only.
     INPUT_FORMAT: "--input-format", // text | stream-json
     JSON_SCHEMA: "--json-schema", // enforce structured output
     AGENT: "--agent", // agent for the session (see `agy agents`)
-    MODE: "--mode", // accept-edits | plan
-    PROJECT: "--project", // project ID for the session
+    PROJECT: "--project", // project ID or name for the session
     NEW_PROJECT: "--new-project",
     DISABLE_SLASH_COMMANDS: "--disable-slash-commands",
+    REMOTE_AGENT: "--remote-agent", // run conversations on remote agents
   },
   SUBCOMMANDS: {
     MODELS: "models",
@@ -124,6 +225,8 @@ export const CLI = {
     UPDATE: "update",
     INSTALL: "install",
     PLUGIN: "plugin",
+    MCP: "mcp",
+    ACP: "acp",
   },
   ENV_VARS: {
     AGY_MCP_CWD: "AGY_MCP_CWD", // Primary: set in MCP client configuration
@@ -146,6 +249,8 @@ export interface ToolArguments {
   conversationId?: string; // Native Antigravity conversation id passed to --conversation
   resetSession?: boolean; // Clear session before run
   continueLatest?: boolean; // --continue (most recent conversation)
+  effort?: string; // --effort
+  mode?: string; // --mode
 
   // Workspace
   addDirs?: string[]; // --add-dir (repeatable)

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { UnifiedTool, StructuredToolResult } from "./registry.js";
+import { UnifiedTool, StructuredToolResult, toolError } from "./registry.js";
 import {
   listSessions,
   getSessionStats,
@@ -77,14 +77,18 @@ export const listSessionsTool: UnifiedTool = {
     switch (action) {
       case "delete": {
         if (!sessionId) {
-          return "❌ **Error**: Session ID required for delete action.\n\nUsage: `list-sessions action:delete sessionId:<session-id>`";
+          return toolError(
+            "❌ **Error**: Session ID required for delete action.\n\nUsage: `list-sessions action:delete sessionId:<session-id>`",
+          );
         }
-        const deleted = deleteSession(sessionId as string);
+        if (!deleteSession(sessionId as string)) {
+          return toolError(
+            `❌ Session \`${sessionId}\` not found or already expired.`,
+          );
+        }
         return {
-          text: deleted
-            ? `✅ Session \`${sessionId}\` deleted successfully.`
-            : `❌ Session \`${sessionId}\` not found or already expired.`,
-          structuredContent: { action: "delete", sessionId, success: deleted },
+          text: `✅ Session \`${sessionId}\` deleted successfully.`,
+          structuredContent: { action: "delete", sessionId, success: true },
         } as StructuredToolResult;
       }
       case "clear":

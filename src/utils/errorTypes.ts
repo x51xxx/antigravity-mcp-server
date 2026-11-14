@@ -13,6 +13,8 @@ export enum ErrorCategory {
   PERMISSION = "PERMISSION",
   NETWORK = "NETWORK",
   SESSION = "SESSION",
+  CANCELLED = "CANCELLED",
+  INVALID_ARGUMENTS = "INVALID_ARGUMENTS",
   UNKNOWN = "UNKNOWN",
 }
 
@@ -52,6 +54,15 @@ export const ERROR_MESSAGES: Record<
     title: "Session Error",
     description: "Conversation is invalid, expired, or not found.",
   },
+  [ErrorCategory.CANCELLED]: {
+    title: "Request Cancelled",
+    description:
+      "The MCP client cancelled the call and the agy process was stopped.",
+  },
+  [ErrorCategory.INVALID_ARGUMENTS]: {
+    title: "Invalid Arguments",
+    description: "The tool arguments cannot be used together.",
+  },
   [ErrorCategory.UNKNOWN]: {
     title: "Unknown Error",
     description: "An unexpected error occurred.",
@@ -72,10 +83,11 @@ export const ERROR_SOLUTIONS: Record<ErrorCategory, string[]> = {
     "Omit the model parameter to use your Antigravity CLI default",
     `Use an exact id or display label from \`agy models\`, e.g. "${DEFAULT_MODEL}" (run the list-models tool to see the matching id)`,
     "Labels change between CLI releases — re-check after `agy update`",
+    "`effort` must be one the model supports (see list-models); Orchestrator takes no effort at all, and a suffixed ID such as gemini-4-hydrogen-high only accepts its own level",
   ],
   [ErrorCategory.RATE_LIMIT]: [
     "Wait a few minutes before retrying",
-    `Consider using a smaller / faster model (e.g. ${MODELS.GEMINI_3_7_FLASH_LOW})`,
+    `Consider using a smaller / faster model (e.g. ${MODELS.GEMINI_3_8_FLASH_LOW})`,
   ],
   [ErrorCategory.TIMEOUT]: [
     "Increase timeout: `timeout: 600000` (10 minutes)",
@@ -95,6 +107,13 @@ export const ERROR_SOLUTIONS: Record<ErrorCategory, string[]> = {
     "Conversation may have expired or been archived",
     "Use `list-sessions` to check active sessions",
     "Use `resetSession: true` to start fresh",
+  ],
+  [ErrorCategory.CANCELLED]: [
+    "Nothing is broken — re-run the request if the cancel was unintended",
+  ],
+  [ErrorCategory.INVALID_ARGUMENTS]: [
+    "Change the arguments named in the message — agy was not started",
+    "Model/effort combinations: see the list-models tool",
   ],
   [ErrorCategory.UNKNOWN]: [
     "Check Antigravity CLI: `agy --version`",
@@ -141,15 +160,89 @@ export class AgyError extends Error {
   }
 }
 
+/**
+ * Map an error message to a category. Order matters: precise signals first
+ * (cancellation, a missing binary, timeouts, rate limits, auth, the CLI's own
+ * model-selection error), and the loose "model … error" pattern only after
+ * them — "rate limit reached for model X" is a rate limit, not a model error.
+ */
 export function classifyError(errorMessage: string): ErrorCategory {
   const message = errorMessage.toLowerCase();
+  const has = (...needles: string[]) =>
+    needles.some((n) => message.includes(n));
+
+  if (has("cancelled by the mcp client", "canceled by the mcp client")) {
+    return ErrorCategory.CANCELLED;
+  }
+
+  // Messages built by describeAgyFailure (agyExecutor.ts) already say what
+  // happened in their prefix; the CLI output after it must not override that.
+  const prefixed: [string, ErrorCategory][] = [
+    ["invalid arguments:", ErrorCategory.INVALID_ARGUMENTS],
+    ["model error:", ErrorCategory.MODEL],
+    ["antigravity cli timed out", ErrorCategory.TIMEOUT],
+    ["antigravity cli print timeout reached", ErrorCategory.TIMEOUT],
+    ["rate limit exceeded", ErrorCategory.RATE_LIMIT],
+    ["authentication failed", ErrorCategory.AUTHENTICATION],
+    ["antigravity cli not found", ErrorCategory.CLI_NOT_FOUND],
+  ];
+  for (const [prefix, category] of prefixed) {
+    if (message.startsWith(prefix)) return category;
+  }
 
   if (
-    message.includes("model not found") ||
-    message.includes("invalid model") ||
-    message.includes("unsupported model") ||
-    message.includes("model is not available") ||
-    message.includes("model not available") ||
+    has(
+      "command not found",
+      "agy: not found",
+      "agy not found",
+      "antigravity cli not found",
+      "antigravity cli (agy) not found",
+    ) ||
+    /\benoent\b/.test(message)
+  ) {
+    return ErrorCategory.CLI_NOT_FOUND;
+  }
+
+  // The CLI's own model/effort rejection is unambiguous.
+  if (
+    has(
+      "invalid model selection",
+      "model not found",
+      "invalid model",
+      "unsupported model",
+      "model is not available",
+      "model not available",
+      "is not recognized as a known model",
+    )
+  ) {
+    return ErrorCategory.MODEL;
+  }
+
+  if (has("timed out", "timeout", "etimedout")) {
+    return ErrorCategory.TIMEOUT;
+  }
+
+  if (
+    has("rate limit", "quota", "too many requests", "resource_exhausted") ||
+    /\b429\b/.test(message)
+  ) {
+    return ErrorCategory.RATE_LIMIT;
+  }
+
+  if (
+    has(
+      "authentication",
+      "unauthorized",
+      "unauthenticated",
+      "please login",
+      "not authenticated",
+    ) ||
+    /\b401\b/.test(message)
+  ) {
+    return ErrorCategory.AUTHENTICATION;
+  }
+
+  if (
     /\bmodel\b.{0,50}\b(?:fail|error|reject|unavailable|unknown)\b/.test(
       message,
     ) ||
@@ -161,65 +254,21 @@ export function classifyError(errorMessage: string): ErrorCategory {
   }
 
   if (
-    message.includes("command not found") ||
-    message.includes("agy: not found") ||
-    message.includes("agy not found") ||
-    message.includes("antigravity cli not found") ||
-    message.includes("enoent")
-  ) {
-    return ErrorCategory.CLI_NOT_FOUND;
-  }
-
-  if (
-    message.includes("authentication") ||
-    message.includes("unauthorized") ||
-    message.includes("401") ||
-    message.includes("please login") ||
-    message.includes("not authenticated")
-  ) {
-    return ErrorCategory.AUTHENTICATION;
-  }
-
-  if (
-    message.includes("rate limit") ||
-    message.includes("quota") ||
-    message.includes("too many requests") ||
-    message.includes("429")
-  ) {
-    return ErrorCategory.RATE_LIMIT;
-  }
-
-  if (
-    message.includes("timeout") ||
-    message.includes("timed out") ||
-    message.includes("etimedout")
-  ) {
-    return ErrorCategory.TIMEOUT;
-  }
-
-  if (
-    message.includes("permission denied") ||
-    message.includes("access denied") ||
-    message.includes("operation not permitted") ||
-    message.includes("not approved")
+    has(
+      "permission denied",
+      "access denied",
+      "operation not permitted",
+      "not approved",
+    )
   ) {
     return ErrorCategory.PERMISSION;
   }
 
-  if (
-    message.includes("network") ||
-    message.includes("connect") ||
-    message.includes("econnrefused") ||
-    message.includes("enotfound")
-  ) {
+  if (has("network", "econnrefused", "enotfound", "econnreset", "connection")) {
     return ErrorCategory.NETWORK;
   }
 
-  if (
-    message.includes("session") ||
-    message.includes("expired") ||
-    message.includes("conversation")
-  ) {
+  if (has("session", "expired", "conversation")) {
     return ErrorCategory.SESSION;
   }
 
@@ -239,6 +288,18 @@ export function createAgyError(
 export function formatErrorForUser(error: Error | string | AgyError): string {
   if (error instanceof AgyError) return error.toUserFriendlyString();
   return createAgyError(error).toUserFriendlyString();
+}
+
+/** "❌ " + the categorized, user-facing text of an agy failure (for toolError). */
+export function agyFailureText(
+  error: unknown,
+  context?: Record<string, unknown>,
+): string {
+  const err =
+    error instanceof Error
+      ? error
+      : new Error(String(error ?? "Unknown error"));
+  return `❌ ${formatErrorForUser(createAgyError(err, context))}`;
 }
 
 export function isRetryableError(error: AgyError | ErrorCategory): boolean {

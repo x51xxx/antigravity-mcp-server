@@ -4,7 +4,7 @@ import {
   executeCommand,
   executeCommandDetailed,
 } from "../utils/commandExecutor.js";
-import { fetchModels } from "../utils/modelList.js";
+import { fetchModels, groupModelFamilies } from "../utils/modelList.js";
 import { SERVER_NAME, SERVER_VERSION } from "../version.js";
 
 const pingArgsSchema = z.object({
@@ -117,7 +117,7 @@ const listModelsArgsSchema = z.object({});
 export const listModelsTool: UnifiedTool = {
   name: "list-models",
   description:
-    "List model labels currently available to Antigravity CLI (`agy models`). Use these exact labels for the `model` parameter.",
+    "List the models available to Antigravity CLI (`agy models`), grouped by family with the `effort` levels each accepts and what it is for. Pass a label, a full ID, or a base ID plus `effort` as the `model` parameter.",
   zodSchema: listModelsArgsSchema,
   annotations: {
     readOnlyHint: true,
@@ -129,6 +129,7 @@ export const listModelsTool: UnifiedTool = {
     properties: {
       models: { type: "array", items: { type: "string" } },
       modelIds: { type: "array", items: { type: "string" } },
+      families: { type: "array" },
     },
     required: ["models"],
   },
@@ -138,16 +139,38 @@ export const listModelsTool: UnifiedTool = {
     const entries = await fetchModels(onProgress);
     const models = entries.map((m) => m.label);
     const modelIds = entries.map((m) => m.id).filter(Boolean);
+    const families = groupModelFamilies(entries);
+    const text =
+      families.length > 0
+        ? `**Available models:**\n\n${families
+            .map((f) => {
+              const effort = f.efforts.length
+                ? `effort: ${f.efforts.join(" | ")} (\`model: "${f.base}", effort: "…"\`)`
+                : "fixed thinking level — no effort";
+              const rows = f.models
+                .map((m) =>
+                  m.id ? `  - ${m.label} — \`${m.id}\`` : `  - ${m.label}`,
+                )
+                .join("\n");
+              return `- **${f.name}** — ${effort}${f.purpose ? `\n  ${f.purpose}` : ""}\n${rows}`;
+            })
+            .join(
+              "\n",
+            )}\n\nPass a label, a full ID, or a base ID plus \`effort\` as \`model\`.`
+        : "(no models returned — is agy authenticated?)";
     return {
-      text:
-        entries.length > 0
-          ? `**Available models:**\n${entries
-              .map((m) =>
-                m.id ? `- ${m.label} — \`${m.id}\`` : `- ${m.label}`,
-              )
-              .join("\n")}\n\nPass either the label or the ID as \`model\`.`
-          : "(no models returned — is agy authenticated?)",
-      structuredContent: { models, modelIds },
+      text,
+      structuredContent: {
+        models,
+        modelIds,
+        families: families.map((f) => ({
+          base: f.base,
+          name: f.name,
+          efforts: f.efforts,
+          purpose: f.purpose,
+          models: f.models,
+        })),
+      },
     } as StructuredToolResult;
   },
 };

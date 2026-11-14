@@ -1,8 +1,8 @@
 {
   "name": "@trishchuk/antigravity-mcp-server",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "mcpName": "io.github.x51xxx/antigravity-mcp-server",
-  "description": "MCP server for Google Antigravity CLI (agy) integration",
+  "description": "MCP server that lets Claude Code, Cursor and other MCP clients hand work to Google Antigravity CLI (agy): long-task delegation to Gemini 4 Orchestrator in a git worktree, read-only plans and reviews, large-context digests",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
@@ -39,7 +39,13 @@
     "code-analysis",
     "automation",
     "typescript",
-    "nodejs"
+    "nodejs",
+    "gemini-4",
+    "orchestrator",
+    "ai-agent",
+    "agent-delegation",
+    "git-worktree",
+    "google-antigravity"
   ],
   "author": "Taras Trishchuk",
   "license": "MIT",
@@ -50,7 +56,7 @@
   "bugs": {
     "url": "https://github.com/x51xxx/antigravity-mcp-server/issues"
   },
-  "homepage": "https://github.com/x51xxx/antigravity-mcp-server#readme",
+  "homepage": "https://trishchuk.com/projects/antigravity-mcp-server/",
   "engines": {
     "node": ">=18.0.0"
   },

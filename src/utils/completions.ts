@@ -1,7 +1,9 @@
-import { MODELS } from "../constants.js";
+import { MODELS, EFFORT_LEVELS, AGENT_MODES } from "../constants.js";
 
 export const ARGUMENT_COMPLETIONS: Record<string, string[]> = {
   model: Object.values(MODELS),
+  effort: [...EFFORT_LEVELS],
+  mode: [...AGENT_MODES],
   responseMode: ["clean", "full"],
   methodology: [
     "divergent",

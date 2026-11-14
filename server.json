@@ -1,0 +1,41 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.x51xxx/antigravity-mcp-server",
+  "description": "Hand work from Claude Code or Cursor to Google Antigravity CLI: delegation, reviews, digests",
+  "title": "Antigravity MCP Server",
+  "repository": {
+    "url": "https://github.com/x51xxx/antigravity-mcp-server",
+    "source": "github"
+  },
+  "version": "0.3.0",
+  "websiteUrl": "https://trishchuk.com/projects/antigravity-mcp-server/",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "@trishchuk/antigravity-mcp-server",
+      "version": "0.3.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "AGY_MCP_CWD",
+          "description": "Default working directory for agy runs (an explicit workingDir still wins)",
+          "format": "string"
+        },
+        {
+          "name": "AGY_SESSION_TTL_MS",
+          "description": "Session time-to-live in milliseconds (default: 86400000 = 24h)",
+          "format": "string",
+          "default": "86400000"
+        },
+        {
+          "name": "AGY_MAX_SESSIONS",
+          "description": "Maximum concurrent sessions (default: 50)",
+          "format": "string",
+          "default": "50"
+        }
+      ]
+    }
+  ]
+}

@@ -12,7 +12,22 @@ export interface StructuredToolResult {
   structuredContent: Record<string, unknown>;
 }
 
-export type ToolExecuteResult = string | StructuredToolResult;
+/** A failed tool call: reported to the client with `isError: true`. */
+export interface ToolErrorResult {
+  text: string;
+  isError: true;
+}
+
+export type ToolExecuteResult = string | StructuredToolResult | ToolErrorResult;
+
+/**
+ * Return this (instead of a plain "❌ …" string) when a tool fails in an
+ * expected way, so the client sees `isError: true` and tools that declare an
+ * `outputSchema` are not required to produce `structuredContent`.
+ */
+export function toolError(text: string): ToolErrorResult {
+  return { text, isError: true };
+}
 
 export interface UnifiedTool {
   name: string;

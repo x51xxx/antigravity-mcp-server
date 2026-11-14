@@ -1,15 +1,18 @@
 import { z } from "zod";
-import { UnifiedTool } from "./registry.js";
+import { UnifiedTool, toolError } from "./registry.js";
+import { agyFailureText } from "../utils/errorTypes.js";
 import {
   startBgTask,
   getBgTask,
   listBgTasks,
   tailLog,
+  readTaskStream,
   stopBgTask,
   removeBgTask,
   BgTaskMeta,
 } from "../utils/bgTaskManager.js";
 import { MODELS } from "../constants.js";
+import { effortSchema, modeSchema, stopSignalSchema } from "./sharedSchemas.js";
 
 const bgAgyArgsSchema = z.object({
   action: z
@@ -28,11 +31,13 @@ const bgAgyArgsSchema = z.object({
     .describe(
       `Optional model override. Known: ${Object.values(MODELS).join(", ")}.`,
     ),
+  effort: effortSchema,
+  mode: modeSchema,
   skipPermissions: z
     .boolean()
     .optional()
     .describe(
-      "--dangerously-skip-permissions (default for bg tasks: true — print mode can't answer permission prompts).",
+      "--dangerously-skip-permissions. Default: true (print mode can't answer permission prompts), false when `mode` is set. Not allowed with mode plan.",
     ),
   sandbox: z
     .boolean()
@@ -44,7 +49,9 @@ const bgAgyArgsSchema = z.object({
   timeout: z
     .number()
     .optional()
-    .describe("agy --print-timeout in milliseconds (default 600000)."),
+    .describe(
+      "agy --print-timeout in milliseconds. Omit for no limit (agy waits for the turn and its background tasks).",
+    ),
 
   // status/tail/stop/remove
   taskId: z.string().optional().describe("Task ID returned by action=start."),
@@ -56,11 +63,7 @@ const bgAgyArgsSchema = z.object({
     .optional()
     .default(80)
     .describe("Lines to return from log tail."),
-  signal: z
-    .enum(["SIGTERM", "SIGKILL", "SIGINT"])
-    .optional()
-    .default("SIGTERM")
-    .describe("Signal for stop action."),
+  signal: stopSignalSchema,
 });
 
 function formatMeta(m: BgTaskMeta): Record<string, unknown> {
@@ -103,16 +106,25 @@ export const bgAgyTool: UnifiedTool = {
       const prompt = (args.prompt as string | undefined)?.trim();
       if (!prompt) throw new Error("prompt is required for action=start");
 
-      const meta = await startBgTask(prompt, {
-        model: args.model as string | undefined,
-        skipPermissions: args.skipPermissions as boolean | undefined,
-        sandbox: args.sandbox as boolean | undefined,
-        workingDir: (args.workingDir || args.cd) as string | undefined,
-        cd: args.cd as string | undefined,
-        addDirs: args.addDirs as string[] | undefined,
-        timeoutMs: args.timeout as number | undefined,
-        label: args.label as string | undefined,
-      });
+      let meta: BgTaskMeta;
+      try {
+        meta = await startBgTask(prompt, {
+          model: args.model as string | undefined,
+          effort: args.effort as string | undefined,
+          mode: args.mode as string | undefined,
+          skipPermissions: args.skipPermissions as boolean | undefined,
+          sandbox: args.sandbox as boolean | undefined,
+          workingDir: (args.workingDir || args.cd) as string | undefined,
+          cd: args.cd as string | undefined,
+          addDirs: args.addDirs as string[] | undefined,
+          timeoutMs: args.timeout as number | undefined,
+          label: args.label as string | undefined,
+        });
+      } catch (error) {
+        return toolError(
+          agyFailureText(error, { model: args.model as string | undefined }),
+        );
+      }
 
       const m = formatMeta(meta);
       return {
@@ -142,7 +154,7 @@ export const bgAgyTool: UnifiedTool = {
 
     if (action === "status") {
       const meta = getBgTask(taskId);
-      if (!meta) return `❌ No task ${taskId}`;
+      if (!meta) return toolError(`❌ No task ${taskId}`);
       return {
         text: `${meta.taskId}\nstate:         ${meta.state}\nexitCode:      ${meta.exitCode ?? "n/a"}\nworkingDir:    ${meta.workingDir ?? "(default)"}\nstartedAt:     ${new Date(meta.startedAt).toISOString()}\nfinishedAt:    ${meta.finishedAt ? new Date(meta.finishedAt).toISOString() : "still running"}\nconversation:  ${meta.conversationId ?? "(not yet parsed)"}\nlabel:         ${meta.label ?? "—"}\nprompt:        ${meta.prompt}`,
         structuredContent: { task: formatMeta(meta) },
@@ -151,8 +163,20 @@ export const bgAgyTool: UnifiedTool = {
 
     if (action === "tail") {
       const meta = getBgTask(taskId);
-      if (!meta) return `❌ No task ${taskId}`;
-      const log = tailLog(taskId, (args.lines as number) || 80);
+      if (!meta) return toolError(`❌ No task ${taskId}`);
+      let log = tailLog(taskId, (args.lines as number) || 80);
+      if (meta.outputFormat === "stream-json") {
+        // stdout is NDJSON in <id>.out (structured tasks and long prompts);
+        // <id>.log only has stderr. Show the agent's progress and answer.
+        const st = readTaskStream(taskId);
+        if (st) {
+          const answer = st.result?.response?.trim() || st.lastText.trim();
+          const outcome = st.result
+            ? `${st.result.status}${st.result.finishedReason ? ` (${st.result.finishedReason})` : ""}${st.result.error ? ` — ${st.result.error}` : ""}`
+            : "running";
+          log = `steps: ${st.steps} · last tool: ${st.lastTool ?? "—"} · outcome: ${outcome}\n\n${answer || "(no text yet)"}${log ? `\n\n--- stderr ---\n${log}` : ""}`;
+        }
+      }
       return {
         text: `=== ${meta.taskId} [${meta.state}] tail ${args.lines || 80} lines ===\n${log || "(log empty)"}`,
         structuredContent: { task: formatMeta(meta), log },
@@ -177,7 +201,7 @@ export const bgAgyTool: UnifiedTool = {
       const ok = removeBgTask(taskId);
       return ok
         ? `🗑️  Removed task ${taskId}`
-        : `❌ Cannot remove ${taskId} (still running or not found).`;
+        : toolError(`❌ Cannot remove ${taskId} (still running or not found).`);
     }
 
     throw new Error(`Unknown action: ${action}`);
