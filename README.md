@@ -15,7 +15,6 @@ For the why behind it, read the [project write-up on trishchuk.com](https://tris
 npm install -g @trishchuk/antigravity-mcp-server
 ```
 
-додай
 Or run from source:
 
 ```bash
