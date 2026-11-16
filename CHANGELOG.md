@@ -5,6 +5,19 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **Visible console windows on Windows** (reported in #1). Background tasks
+  (`bg-antigravity`, `delegate-antigravity`) opened a new console window for
+  every tool command agy ran. On Windows they now start through a small launcher
+  (`dist/utils/bgLauncher.js`): the launcher is detached, so the task still
+  survives an MCP server restart, and it runs agy with `windowsHide`, so agy's
+  tool commands share one hidden console. Foreground runs also pass
+  `windowsHide`. `stop` on Windows ends the whole process tree (`taskkill /T`)
+  instead of agy alone. Other platforms are unchanged.
+
 ## [0.3.0] - 2026-11-14
 
 Support for Antigravity CLI **v1.5.9**.

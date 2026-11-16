@@ -13,8 +13,10 @@ import {
   statSync,
   readSync,
 } from "fs";
+import { spawnSync } from "child_process";
 import { join } from "path";
 import { homedir } from "os";
+import { fileURLToPath } from "url";
 import { randomBytes } from "crypto";
 import {
   AgyCommandBuilder,
@@ -197,6 +199,25 @@ function reconcile(meta: BgTaskMeta): BgTaskMeta {
   return meta;
 }
 
+const BG_LAUNCHER = fileURLToPath(new URL("./bgLauncher.js", import.meta.url));
+
+/**
+ * What to spawn for a background task. On Windows agy goes through bgLauncher
+ * (see there): spawning agy detached directly opens a visible console window
+ * for every tool command, and non-detached it dies with the MCP server.
+ */
+export function bgSpawnTarget(
+  agyArgs: string[],
+  platform: NodeJS.Platform = process.platform,
+): { command: string; args: string[] } {
+  return platform === "win32"
+    ? {
+        command: process.execPath,
+        args: [BG_LAUNCHER, CLI.COMMANDS.AGY, ...agyArgs],
+      }
+    : { command: CLI.COMMANDS.AGY, args: agyArgs };
+}
+
 export interface StartOptions extends AgyCommandBuilderOptions {
   label?: string;
   /**
@@ -254,9 +275,11 @@ export async function startBgTask(
     outFd = structured
       ? openSync(outPath(taskId), "a", PRIVATE_FILE_MODE)
       : errFd;
-    const child = spawn(CLI.COMMANDS.AGY, args, {
+    const target = bgSpawnTarget(args);
+    const child = spawn(target.command, target.args, {
       cwd: workingDir,
       detached: true,
+      windowsHide: true,
       stdio: ["pipe", outFd, errFd],
       env: process.env,
     });
@@ -394,13 +417,24 @@ export function stopBgTask(
     return false;
   }
   try {
-    // The child was spawned detached, so it leads its own process group;
-    // signal the group so agy's own subprocesses (shell commands, MCP
-    // servers it started) stop too.
-    try {
-      process.kill(-meta.pid, signal);
-    } catch {
-      process.kill(meta.pid, signal);
+    if (process.platform === "win32") {
+      // No process groups on Windows: taskkill /T walks the tree (launcher →
+      // agy → its tool commands). Killing the launcher alone would take agy
+      // down (job object) but leave agy's own children running.
+      const r = spawnSync("taskkill", ["/PID", String(meta.pid), "/T", "/F"], {
+        windowsHide: true,
+        stdio: "ignore",
+      });
+      if (r.status !== 0 && isAlive(meta.pid)) process.kill(meta.pid, signal);
+    } else {
+      // The child was spawned detached, so it leads its own process group;
+      // signal the group so agy's own subprocesses (shell commands, MCP
+      // servers it started) stop too.
+      try {
+        process.kill(-meta.pid, signal);
+      } catch {
+        process.kill(meta.pid, signal);
+      }
     }
     meta.state = "killed";
     meta.finishedAt = Date.now();

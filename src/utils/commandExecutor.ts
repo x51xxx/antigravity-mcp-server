@@ -192,6 +192,9 @@ async function executeOnce(
     const childProcess = spawn(command, args, {
       env: process.env,
       shell: false,
+      // Windows: agy gets a hidden console instead of a visible window when the
+      // server has none (GUI clients), and its tool commands share it.
+      windowsHide: true,
       stdio: [stdin !== undefined ? "pipe" : "ignore", "pipe", "pipe"],
       detached: USE_PROCESS_GROUPS,
       ...(cwd ? { cwd } : {}),
